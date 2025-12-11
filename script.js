@@ -534,5 +534,3 @@ textboxEl.addEventListener("click", () => {
 window.addEventListener("load", () => {
   startScene(currentSceneId);
 });
-
-
