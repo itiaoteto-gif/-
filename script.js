@@ -1,4 +1,11 @@
 // =======================================
+// デバッグ用：スクリプトエラーをアラート表示
+// =======================================
+window.addEventListener("error", (e) => {
+  alert("スクリプトエラー: " + e.message);
+});
+
+// =======================================
 // 設定：素材フォルダのパス
 // =======================================
 const ASSET_PATHS = {
@@ -17,8 +24,6 @@ const flags = {
 
 // =======================================
 // シナリオ定義
-// - テキストを書き換えるのはここだけでOK
-// - 必要に応じて scene（場面）を追加してください
 // =======================================
 
 /**
@@ -57,7 +62,6 @@ const SCENES = {
       {
         label: "思い出す",
         next: "omoidasu",
-        // この2つのフラグが true になっていないと表示されない
         requireFlags: ["hit_unpassed_seen", "not_hit_unpassed_seen"]
       }
     ]
@@ -69,10 +73,9 @@ const SCENES = {
   hit_unpassed: {
     bg: "room_dark.png",
     chara: "self_bed.png",
-    setFlags: {                     // このシーンに入ったらフラグを立てる
+    setFlags: {
       hit_unpassed_seen: true
     },
-    // music: undefined → 前のBGMをそのまま
     text: [
       "打つ",
       "注射器を手に取った。",
@@ -146,7 +149,7 @@ const SCENES = {
   not_hit_unpassed: {
     bg: "room_dark.png",
     chara: "self_bed.png",
-    setFlags: {                     // このシーンに入ったらフラグを立てる
+    setFlags: {
       not_hit_unpassed_seen: true
     },
     text: [
@@ -350,7 +353,7 @@ const SCENES = {
   morning: {
     bg: "room_morning.png",
     chara: null,
-    music: "bgm_morning.mp3", // BGM切り替え
+    music: "bgm_morning.mp3",
     text: [
       "目が覚めると、カーテンの隙間からうっすらと淡い朝日が差し込んでいた。",
       "スマホで時計を確認すると、まだ6時であることに気づく。",
@@ -380,20 +383,18 @@ let currentSceneId = "intro";
 let currentLineIndex = 0;
 let isShowingChoices = false;
 
-// DOM取得
-const bgEl = document.getElementById("background-layer");
-const charaEl = document.getElementById("chara-layer");
-const textboxEl = document.getElementById("textbox");
-const nameEl = document.getElementById("namebox");
-const messageEl = document.getElementById("message");
-const choicesEl = document.getElementById("choices");
-const clickHintEl = document.getElementById("click-hint");
-const bgmEl = document.getElementById("bgm");
+// 現在再生中のBGMファイル名（dataset は使わない）
+let currentBgmName = "";
 
-if (bgmEl) {
-  // BGM要素があるときだけ初期値をセット
-  bgmEl.dataset.currentMusic = "";
-}
+// DOM取得
+const bgEl        = document.getElementById("background-layer");
+const charaEl     = document.getElementById("chara-layer");
+const textboxEl   = document.getElementById("textbox");
+const nameEl      = document.getElementById("namebox");
+const messageEl   = document.getElementById("message");
+const choicesEl   = document.getElementById("choices");
+const clickHintEl = document.getElementById("click-hint");
+const bgmEl       = document.getElementById("bgm");
 
 // シーン開始
 function startScene(id) {
@@ -402,13 +403,14 @@ function startScene(id) {
     console.error("存在しないシーンID:", id);
     return;
   }
+
   currentSceneId = id;
   currentLineIndex = 0;
   isShowingChoices = false;
   choicesEl.innerHTML = "";
   clickHintEl.style.display = "block";
 
-  // ★ このシーンで立てるべきフラグがあれば反映
+  // フラグ更新
   if (scene.setFlags) {
     Object.keys(scene.setFlags).forEach(key => {
       flags[key] = scene.setFlags[key];
@@ -422,27 +424,29 @@ function startScene(id) {
 // 背景 / 立ち絵 / BGM の切り替え
 function applySceneAssets(scene) {
   // 背景
-  if (scene.bg) {
+  if (scene.bg && bgEl) {
     bgEl.style.backgroundImage = `url("${ASSET_PATHS.bg}${scene.bg}")`;
   }
 
   // 立ち絵
-  if (scene.chara) {
-    charaEl.src = `${ASSET_PATHS.chara}${scene.chara}`;
-    charaEl.style.display = "block";
-  } else {
-    charaEl.style.display = "none";
+  if (charaEl) {
+    if (scene.chara) {
+      charaEl.src = `${ASSET_PATHS.chara}${scene.chara}`;
+      charaEl.style.display = "block";
+    } else {
+      charaEl.style.display = "none";
+    }
   }
 
   // BGM
   if (bgmEl && scene.music !== undefined) {
     if (scene.music) {
       const nextMusic = scene.music;
-      if (bgmEl.dataset.currentMusic !== nextMusic) {
+      if (currentBgmName !== nextMusic) {
         bgmEl.pause();
         bgmEl.currentTime = 0;
         bgmEl.src = `${ASSET_PATHS.bgm}${nextMusic}`;
-        bgmEl.dataset.currentMusic = nextMusic;
+        currentBgmName = nextMusic;
         bgmEl.play().catch(() => {
           // 自動再生ブロック時は無視
         });
@@ -451,7 +455,7 @@ function applySceneAssets(scene) {
       bgmEl.pause();
       bgmEl.currentTime = 0;
       bgmEl.removeAttribute("src");
-      bgmEl.dataset.currentMusic = "";
+      currentBgmName = "";
     }
   }
 }
@@ -469,7 +473,6 @@ function showCurrentLine() {
     return;
   }
 
-  // 選択肢モード解除
   isShowingChoices = false;
   choicesEl.innerHTML = "";
   clickHintEl.style.display = "block";
@@ -478,7 +481,6 @@ function showCurrentLine() {
     nameEl.textContent = "";
     messageEl.textContent = line;
   } else {
-    // { speaker, content } 形式
     nameEl.textContent = line.speaker || "";
     messageEl.textContent = line.content || "";
   }
@@ -490,14 +492,12 @@ function showChoices(scene) {
   choicesEl.innerHTML = "";
   clickHintEl.style.display = "none";
 
-  // フラグ条件を満たしている選択肢だけを表示する
   const availableChoices = (scene.choices || []).filter(choice => {
-    if (!choice.requireFlags) return true; // 条件なし → 常に表示
+    if (!choice.requireFlags) return true;
     return choice.requireFlags.every(flagName => flags[flagName]);
   });
 
   if (availableChoices.length === 0) {
-    // 表示できる選択肢がなければエンド扱い
     messageEl.textContent += "\n\n（エンド）";
     return;
   }
@@ -516,17 +516,12 @@ function showChoices(scene) {
 
 // テキストボックスクリックで次の行へ
 textboxEl.addEventListener("click", () => {
-  // ★ まだBGMが再生されていなければ、このクリックをきっかけに再生を試みる
+  // ユーザー操作をトリガーに BGM 再生を再試行
   if (bgmEl && bgmEl.paused && bgmEl.src) {
-    bgmEl.play().catch(() => {
-      // ここも失敗しても無視（ユーザーがミュートしている等）
-    });
+    bgmEl.play().catch(() => {});
   }
 
-  if (isShowingChoices) {
-    // 選択肢表示中はクリックで進めない
-    return;
-  }
+  if (isShowingChoices) return;
 
   const scene = SCENES[currentSceneId];
   if (!scene) return;
@@ -539,4 +534,3 @@ textboxEl.addEventListener("click", () => {
 window.addEventListener("load", () => {
   startScene(currentSceneId);
 });
-
