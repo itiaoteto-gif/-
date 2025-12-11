@@ -337,8 +337,7 @@ const SCENES = {
       "意識がだんだんとはっきりしていく。",
       "……",
       { speaker: "俺", content: "「振り返らないでよ。」" },
-      { speaker: "俺", content: "「君の選択は……正しいよ。」" },
-
+      { speaker: "俺", content: "「君の選択は……正しいよ。」" }
     ],
     choices: [
       { label: "目を覚ます", next: "morning" }
@@ -540,3 +539,4 @@ textboxEl.addEventListener("click", () => {
 window.addEventListener("load", () => {
   startScene(currentSceneId);
 });
+
